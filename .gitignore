@@ -1,5 +1,35 @@
-# IDEs
+# Dependencies
+node_modules/
+
+# Backend build output
+dist/
+
+# Next.js build output
+.next/
+build/
+
+# Blockchain build artefacts
+blockchain/build/
+blockchain/.sui/
+
+# Environment secrets — never commit real .env files
+.env
+.env.local
+.env.production
+.env.*.local
+
+# Preserve example files
+!**/.env.example
+
+# OS artefacts
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor artefacts
+.idea/
+.vscode/settings.json
+.vscode/launch.json
+!.vscode/extensions.json
 .kiro
-.vscode
-.trae
 Cestra.md
