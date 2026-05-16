@@ -1,12 +1,16 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
+import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   // Global route prefix — all routes served under /v1
   app.setGlobalPrefix('v1');
+
+  // Global exception filter — normalizes all error responses
+  app.useGlobalFilters(new HttpExceptionFilter());
 
   // Global validation pipe — strips unknown fields and transforms DTOs
   app.useGlobalPipes(
