@@ -26,3 +26,11 @@ export {
   CircuitBreakerState,
   CircuitBreakerConfig,
 } from './circuit-breaker.service';
+export {
+  OnChainMonitorService,
+  ParsedEvent,
+  OnChainEventType,
+} from './on-chain-monitor.service';
+export { StateSyncService } from './state-sync.service';
+export { EventRoutingService } from './event-routing.service';
+export { EventDeduplicationService } from './event-deduplication.service';
