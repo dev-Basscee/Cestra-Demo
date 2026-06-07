@@ -1,274 +1,164 @@
-import {
-  Injectable,
-  Logger,
-  OnModuleInit,
-  Inject,
-} from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { OnChainMonitorService, ParsedEvent, OnChainEventType } from './on-chain-monitor.service';
-import { StateSyncService } from './state-sync.service';
 
 /**
- * EventRoutingService maps events to their corresponding handlers
- * based on event type and module.
+ * EventRoutingService maps event types to module-specific handlers.
  *
- * This service provides a centralized registry for event handlers
- * and routes parsed events to the appropriate handler for processing.
+ * Features:
+ * - Extensible event handler registration
+ * - Automatic handler discovery for modules
+ * - Comprehensive error handling
+ * - Support for async handlers
  */
 
-export interface EventHandler {
-  eventType: string;
-  module: string;
-  handler: (event: ParsedEvent) => Promise<void>;
+export type EventHandler = (event: ParsedEvent) => Promise<void>;
+
+export interface EventHandlerRegistry {
+  [eventType: string]: EventHandler[];
 }
 
 @Injectable()
-export class EventRoutingService implements OnModuleInit {
+export class EventRoutingService {
   private readonly logger = new Logger(EventRoutingService.name);
-  private handlers: Map<string, EventHandler> = new Map();
+  private handlers: EventHandlerRegistry = {};
 
   constructor(
-    @Inject(OnChainMonitorService)
-    private onChainMonitor: OnChainMonitorService,
-    @Inject(StateSyncService)
-    private stateSync: StateSyncService,
-  ) {}
-
-  async onModuleInit() {
-    this.logger.log('Initializing EventRoutingService');
-
-    // Register all handlers
-    this.registerHandlers();
-
-    this.logger.log(`Registered ${this.handlers.size} event handlers`);
+    private onChainMonitorService: OnChainMonitorService,
+  ) {
+    this.initializeHandlers();
   }
 
   /**
-   * Register all event handlers
+   * Initialize built-in event handlers
    */
-  private registerHandlers(): void {
-    // Send module handlers
-    this.registerHandler({
-      eventType: OnChainEventType.SEND_EVENT,
-      module: 'send',
-      handler: (event) => this.handleSendEvent(event),
+  private initializeHandlers(): void {
+    // Module event types - handlers will be registered by individual modules
+    this.handlers = {
+      [OnChainEventType.SEND_EVENT]: [],
+      [OnChainEventType.POOL_CREATED]: [],
+      [OnChainEventType.POOL_CONTRIBUTED]: [],
+      [OnChainEventType.POOL_EXECUTED]: [],
+      [OnChainEventType.YIELD_DEPOSITED]: [],
+      [OnChainEventType.YIELD_ACCRUED]: [],
+      [OnChainEventType.CIRCLE_CREATED]: [],
+      [OnChainEventType.CIRCLE_PAYOUT_TRIGGERED]: [],
+      [OnChainEventType.RATELOCK_CREATED]: [],
+      [OnChainEventType.RATELOCK_FILLED]: [],
+      [OnChainEventType.RATELOCK_EXPIRED]: [],
+      [OnChainEventType.BRIDGE_CCTP_COMPLETED]: [],
+      [OnChainEventType.BRIDGE_WORMHOLE_COMPLETED]: [],
+    };
+
+    // Subscribe to all events
+    this.onChainMonitorService.onEvent('event', async (event: ParsedEvent) => {
+      await this.routeEvent(event);
     });
 
-    // Pool module handlers
-    this.registerHandler({
-      eventType: OnChainEventType.POOL_CREATED,
-      module: 'pool',
-      handler: (event) => this.handlePoolCreatedEvent(event),
-    });
-
-    this.registerHandler({
-      eventType: OnChainEventType.POOL_CONTRIBUTED,
-      module: 'pool',
-      handler: (event) => this.handlePoolContributedEvent(event),
-    });
-
-    this.registerHandler({
-      eventType: OnChainEventType.POOL_EXECUTED,
-      module: 'pool',
-      handler: (event) => this.handlePoolExecutedEvent(event),
-    });
-
-    // Yield module handlers
-    this.registerHandler({
-      eventType: OnChainEventType.YIELD_DEPOSITED,
-      module: 'yield',
-      handler: (event) => this.handleYieldDepositedEvent(event),
-    });
-
-    this.registerHandler({
-      eventType: OnChainEventType.YIELD_ACCRUED,
-      module: 'yield',
-      handler: (event) => this.handleYieldAccruedEvent(event),
-    });
-
-    // Circle module handlers
-    this.registerHandler({
-      eventType: OnChainEventType.CIRCLE_CREATED,
-      module: 'circle',
-      handler: (event) => this.handleCircleCreatedEvent(event),
-    });
-
-    this.registerHandler({
-      eventType: OnChainEventType.CIRCLE_PAYOUT_TRIGGERED,
-      module: 'circle',
-      handler: (event) => this.handleCirclePayoutTriggeredEvent(event),
-    });
-
-    // RateLock module handlers
-    this.registerHandler({
-      eventType: OnChainEventType.RATELOCK_CREATED,
-      module: 'ratelock',
-      handler: (event) => this.handleRateLockCreatedEvent(event),
-    });
-
-    this.registerHandler({
-      eventType: OnChainEventType.RATELOCK_FILLED,
-      module: 'ratelock',
-      handler: (event) => this.handleRateLockFilledEvent(event),
-    });
-
-    this.registerHandler({
-      eventType: OnChainEventType.RATELOCK_EXPIRED,
-      module: 'ratelock',
-      handler: (event) => this.handleRateLockExpiredEvent(event),
-    });
-
-    // Bridge module handlers
-    this.registerHandler({
-      eventType: OnChainEventType.BRIDGE_CCTP_COMPLETED,
-      module: 'bridge',
-      handler: (event) => this.handleBridgeCctpCompletedEvent(event),
-    });
-
-    this.registerHandler({
-      eventType: OnChainEventType.BRIDGE_WORMHOLE_COMPLETED,
-      module: 'bridge',
-      handler: (event) => this.handleBridgeWormholeCompletedEvent(event),
-    });
+    this.logger.log('EventRoutingService initialized');
   }
 
   /**
-   * Register an event handler
+   * Register an event handler for a specific event type
    */
-  private registerHandler(handler: EventHandler): void {
-    this.handlers.set(handler.eventType, handler);
-
-    // Subscribe to this event type on the monitor
-    this.onChainMonitor.onEvent(
-      handler.eventType,
-      (event: ParsedEvent) => this.routeEvent(event, handler),
-    );
-
-    this.logger.debug(`Registered handler: ${handler.eventType}`);
-  }
-
-  /**
-   * Route event to appropriate handler
-   */
-  private async routeEvent(
-    event: ParsedEvent,
+  registerHandler(
+    eventType: string | OnChainEventType,
     handler: EventHandler,
-  ): Promise<void> {
-    try {
-      this.logger.debug(
-        `Routing event: ${event.eventType} -> ${handler.module}`,
-      );
+  ): void {
+    if (!this.handlers[eventType]) {
+      this.handlers[eventType] = [];
+    }
 
-      await handler.handler(event);
+    this.handlers[eventType].push(handler);
 
-      this.logger.debug(
-        `Event handled successfully: ${event.eventType}`,
-      );
-    } catch (error) {
-      this.logger.error(
-        `Error handling event ${event.eventType}: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
+    this.logger.debug(
+      `Handler registered for event type: ${eventType} (total: ${this.handlers[eventType].length})`,
+    );
+  }
+
+  /**
+   * Register multiple handlers at once
+   */
+  registerHandlers(
+    handlers: Array<{
+      eventType: string | OnChainEventType;
+      handler: EventHandler;
+    }>,
+  ): void {
+    for (const { eventType, handler } of handlers) {
+      this.registerHandler(eventType, handler);
     }
   }
 
   /**
-   * Send module handlers
+   * Route event to all registered handlers
    */
-  private async handleSendEvent(event: ParsedEvent): Promise<void> {
-    this.logger.debug(`Handling SendEvent: ${event.digest}`);
-    // Handler is delegated to StateSyncService
-  }
+  private async routeEvent(event: ParsedEvent): Promise<void> {
+    const handlers = this.handlers[event.eventType];
 
-  /**
-   * Pool module handlers
-   */
-  private async handlePoolCreatedEvent(event: ParsedEvent): Promise<void> {
-    this.logger.debug(`Handling PoolCreatedEvent: ${event.digest}`);
-  }
+    if (!handlers || handlers.length === 0) {
+      this.logger.warn(
+        `No handlers registered for event type: ${event.eventType}`,
+      );
+      return;
+    }
 
-  private async handlePoolContributedEvent(event: ParsedEvent): Promise<void> {
-    this.logger.debug(`Handling PoolContributedEvent: ${event.digest}`);
-  }
-
-  private async handlePoolExecutedEvent(event: ParsedEvent): Promise<void> {
-    this.logger.debug(`Handling PoolExecutedEvent: ${event.digest}`);
-  }
-
-  /**
-   * Yield module handlers
-   */
-  private async handleYieldDepositedEvent(event: ParsedEvent): Promise<void> {
-    this.logger.debug(`Handling YieldDepositedEvent: ${event.digest}`);
-  }
-
-  private async handleYieldAccruedEvent(event: ParsedEvent): Promise<void> {
-    this.logger.debug(`Handling YieldAccruedEvent: ${event.digest}`);
-  }
-
-  /**
-   * Circle module handlers
-   */
-  private async handleCircleCreatedEvent(event: ParsedEvent): Promise<void> {
-    this.logger.debug(`Handling CircleCreatedEvent: ${event.digest}`);
-  }
-
-  private async handleCirclePayoutTriggeredEvent(
-    event: ParsedEvent,
-  ): Promise<void> {
     this.logger.debug(
-      `Handling CirclePayoutTriggeredEvent: ${event.digest}`,
+      `Routing event ${event.eventType} (digest: ${event.digest}) to ${handlers.length} handler(s)`,
     );
-  }
 
-  /**
-   * RateLock module handlers
-   */
-  private async handleRateLockCreatedEvent(event: ParsedEvent): Promise<void> {
-    this.logger.debug(`Handling RateLockCreatedEvent: ${event.digest}`);
-  }
-
-  private async handleRateLockFilledEvent(event: ParsedEvent): Promise<void> {
-    this.logger.debug(`Handling RateLockFilledEvent: ${event.digest}`);
-  }
-
-  private async handleRateLockExpiredEvent(event: ParsedEvent): Promise<void> {
-    this.logger.debug(`Handling RateLockExpiredEvent: ${event.digest}`);
-  }
-
-  /**
-   * Bridge module handlers
-   */
-  private async handleBridgeCctpCompletedEvent(
-    event: ParsedEvent,
-  ): Promise<void> {
-    this.logger.debug(`Handling BridgeCctpCompletedEvent: ${event.digest}`);
-  }
-
-  private async handleBridgeWormholeCompletedEvent(
-    event: ParsedEvent,
-  ): Promise<void> {
-    this.logger.debug(
-      `Handling BridgeWormholeCompletedEvent: ${event.digest}`,
+    // Execute all handlers in parallel but catch individual errors
+    const results = await Promise.allSettled(
+      handlers.map((handler) => handler(event)),
     );
+
+    // Log any errors but don't block other handlers
+    for (let i = 0; i < results.length; i++) {
+      if (results[i].status === 'rejected') {
+        const reason = results[i];
+        this.logger.error(
+          `Handler ${i} failed for ${event.eventType}: ${reason instanceof Error ? reason.reason.message : 'Unknown error'}`,
+        );
+      }
+    }
   }
 
   /**
-   * Get handler for event type
+   * Get all registered handlers for an event type
    */
-  public getHandler(eventType: string): EventHandler | undefined {
-    return this.handlers.get(eventType);
+  getHandlers(eventType: string | OnChainEventType): EventHandler[] {
+    return this.handlers[eventType] || [];
   }
 
   /**
-   * Get all registered handlers
+   * Get statistics about registered handlers
    */
-  public getAllHandlers(): EventHandler[] {
-    return Array.from(this.handlers.values());
+  getStats(): {
+    totalEventTypes: number;
+    totalHandlers: number;
+    handlerCounts: { [eventType: string]: number };
+  } {
+    const handlerCounts: { [eventType: string]: number } = {};
+    let totalHandlers = 0;
+
+    for (const [eventType, handlers] of Object.entries(this.handlers)) {
+      handlerCounts[eventType] = handlers.length;
+      totalHandlers += handlers.length;
+    }
+
+    return {
+      totalEventTypes: Object.keys(this.handlers).length,
+      totalHandlers,
+      handlerCounts,
+    };
   }
 
   /**
-   * Check if handler exists for event type
+   * Clear all handlers (for testing)
    */
-  public hasHandler(eventType: string): boolean {
-    return this.handlers.has(eventType);
+  clearHandlers(): void {
+    for (const eventType of Object.keys(this.handlers)) {
+      this.handlers[eventType] = [];
+    }
+    this.logger.log('All handlers cleared');
   }
 }
