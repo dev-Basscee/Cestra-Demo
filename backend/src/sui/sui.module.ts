@@ -1,13 +1,21 @@
 import { Module, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { SuiClient } from '@mysten/sui/client';
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
 import { BlockchainConfigService } from './blockchain-config.service';
+import { TransactionBuilderService } from './transaction-builder.service';
+import { TransactionSigningService } from './transaction-signing.service';
+import { TransactionSubmissionService } from './transaction-submission.service';
+import { RetryStrategy } from './retry-strategy.service';
+import { CircuitBreakerService } from './circuit-breaker.service';
+import { PendingTransaction } from '../blockchain/entities/pending-transaction.entity';
 
 export const SUI_CLIENT = 'SUI_CLIENT';
 export const SUI_KEYPAIR = 'SUI_KEYPAIR';
 
 @Module({
+  imports: [TypeOrmModule.forFeature([PendingTransaction])],
   providers: [
     {
       provide: SUI_CLIENT,
@@ -43,9 +51,24 @@ export const SUI_KEYPAIR = 'SUI_KEYPAIR';
       inject: [ConfigService],
     },
     BlockchainConfigService,
+    TransactionBuilderService,
+    TransactionSigningService,
+    RetryStrategy,
+    CircuitBreakerService,
+    TransactionSubmissionService,
   ],
-  exports: [SUI_CLIENT, SUI_KEYPAIR, BlockchainConfigService],
+  exports: [
+    SUI_CLIENT,
+    SUI_KEYPAIR,
+    BlockchainConfigService,
+    TransactionBuilderService,
+    TransactionSigningService,
+    RetryStrategy,
+    CircuitBreakerService,
+    TransactionSubmissionService,
+  ],
 })
+
 export class SuiModule implements OnModuleInit {
   private readonly logger = new Logger(SuiModule.name);
 
