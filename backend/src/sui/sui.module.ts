@@ -9,13 +9,33 @@ import { TransactionSigningService } from './transaction-signing.service';
 import { TransactionSubmissionService } from './transaction-submission.service';
 import { RetryStrategy } from './retry-strategy.service';
 import { CircuitBreakerService } from './circuit-breaker.service';
+import { OnChainMonitorService } from './on-chain-monitor.service';
+import { StateSyncService } from './state-sync.service';
+import { EventRoutingService } from './event-routing.service';
+import { EventDeduplicationService } from './event-deduplication.service';
 import { PendingTransaction } from '../blockchain/entities/pending-transaction.entity';
+import { Transaction } from '../blockchain/entities/transaction.entity';
+import { BatchPayout } from '../blockchain/entities/batch-payout.entity';
+import { YieldDeposit } from '../blockchain/entities/yield-deposit.entity';
+import { SavingsCircle } from '../blockchain/entities/savings-circle.entity';
+import { RateLock } from '../blockchain/entities/rate-lock.entity';
+import { CrossChainTransfer } from '../blockchain/entities/cross-chain-transfer.entity';
 
 export const SUI_CLIENT = 'SUI_CLIENT';
 export const SUI_KEYPAIR = 'SUI_KEYPAIR';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([PendingTransaction])],
+  imports: [
+    TypeOrmModule.forFeature([
+      PendingTransaction,
+      Transaction,
+      BatchPayout,
+      YieldDeposit,
+      SavingsCircle,
+      RateLock,
+      CrossChainTransfer,
+    ]),
+  ],
   providers: [
     {
       provide: SUI_CLIENT,
@@ -56,6 +76,10 @@ export const SUI_KEYPAIR = 'SUI_KEYPAIR';
     RetryStrategy,
     CircuitBreakerService,
     TransactionSubmissionService,
+    OnChainMonitorService,
+    StateSyncService,
+    EventRoutingService,
+    EventDeduplicationService,
   ],
   exports: [
     SUI_CLIENT,
@@ -66,6 +90,10 @@ export const SUI_KEYPAIR = 'SUI_KEYPAIR';
     RetryStrategy,
     CircuitBreakerService,
     TransactionSubmissionService,
+    OnChainMonitorService,
+    StateSyncService,
+    EventRoutingService,
+    EventDeduplicationService,
   ],
 })
 
