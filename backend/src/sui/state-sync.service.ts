@@ -132,13 +132,12 @@ export class StateSyncService {
       await this.dataSource.transaction(async (manager) => {
         // Try to find existing transaction by digest
         let transaction = await manager.findOne(Transaction, {
-          where: { on_chain_digest: event.digest },
+          where: { onChainDigest: event.digest },
         });
 
         if (transaction) {
           // Update existing
-          transaction.status = 'CONFIRMED';
-          transaction.on_chain_timestamp = new Date(event.timestamp);
+          transaction.status = 'CONFIRMED' as any;
           await manager.save(transaction);
 
           this.logger.debug(
@@ -151,10 +150,9 @@ export class StateSyncService {
             recipient,
             amount: BigInt(amount),
             fee: BigInt(fee),
-            kyc_tier: 1, // Will be updated by compliance engine
-            status: 'CONFIRMED',
-            on_chain_digest: event.digest,
-            on_chain_timestamp: new Date(event.timestamp),
+            kycTier: 1, // Will be updated by compliance engine
+            status: 'CONFIRMED' as any,
+            onChainDigest: event.digest,
           });
 
           await manager.save(transaction);
