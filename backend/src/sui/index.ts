@@ -34,3 +34,14 @@ export {
 export { StateSyncService } from './state-sync.service';
 export { EventRoutingService } from './event-routing.service';
 export { EventDeduplicationService } from './event-deduplication.service';
+export {
+  ComplianceEngine,
+  ComplianceResult,
+  OFACRiskScore,
+  ComplianceContext,
+} from './compliance-engine.service';
+export {
+  OFACService,
+  OFACCheckResult,
+  ProviderResponse,
+} from './ofac-aml.service';
