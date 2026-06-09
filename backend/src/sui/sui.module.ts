@@ -13,6 +13,8 @@ import { OnChainMonitorService } from './on-chain-monitor.service';
 import { StateSyncService } from './state-sync.service';
 import { EventRoutingService } from './event-routing.service';
 import { EventDeduplicationService } from './event-deduplication.service';
+import { ComplianceEngine } from './compliance-engine.service';
+import { OFACService } from './ofac-aml.service';
 import { PendingTransaction } from '../blockchain/entities/pending-transaction.entity';
 import { Transaction } from '../blockchain/entities/transaction.entity';
 import { BatchPayout } from '../blockchain/entities/batch-payout.entity';
@@ -20,6 +22,8 @@ import { YieldDeposit } from '../blockchain/entities/yield-deposit.entity';
 import { SavingsCircle } from '../blockchain/entities/savings-circle.entity';
 import { RateLock } from '../blockchain/entities/rate-lock.entity';
 import { CrossChainTransfer } from '../blockchain/entities/cross-chain-transfer.entity';
+import { Blacklist } from '../blockchain/entities/blacklist.entity';
+import { User } from '../auth/entities/user.entity';
 
 export const SUI_CLIENT = 'SUI_CLIENT';
 export const SUI_KEYPAIR = 'SUI_KEYPAIR';
@@ -34,6 +38,8 @@ export const SUI_KEYPAIR = 'SUI_KEYPAIR';
       SavingsCircle,
       RateLock,
       CrossChainTransfer,
+      Blacklist,
+      User,
     ]),
   ],
   providers: [
@@ -80,6 +86,8 @@ export const SUI_KEYPAIR = 'SUI_KEYPAIR';
     StateSyncService,
     EventRoutingService,
     EventDeduplicationService,
+    OFACService,
+    ComplianceEngine,
   ],
   exports: [
     SUI_CLIENT,
@@ -94,6 +102,8 @@ export const SUI_KEYPAIR = 'SUI_KEYPAIR';
     StateSyncService,
     EventRoutingService,
     EventDeduplicationService,
+    OFACService,
+    ComplianceEngine,
   ],
 })
 
