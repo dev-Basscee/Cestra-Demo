@@ -1,18 +1,18 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { ConfigService } from '@nestjs/config';
 import { OFACService, OFACCheckResult } from './ofac-aml.service';
 
 describe('OFACService', () => {
   let service: OFACService;
-  let configService: ConfigService;
+  let mockConfigService: any;
   let mockConfigGet: jest.Mock;
 
-  beforeEach(async () => {
-    // Create a persistent mock for ConfigService
+  const createService = async (
+    apiUrl?: string,
+    apiKey?: string,
+  ): Promise<OFACService> => {
     mockConfigGet = jest.fn((key: string, defaultValue?: any) => {
       const config = {
-        OFAC_API_URL: undefined,
-        OFAC_API_KEY: undefined,
+        OFAC_API_URL: apiUrl,
+        OFAC_API_KEY: apiKey,
         OFAC_PROVIDER: 'chainalysis',
         OFAC_MAX_RETRIES: 3,
         OFAC_TIMEOUT_MS: 30000,
@@ -20,29 +20,31 @@ describe('OFACService', () => {
       return config[key] !== undefined ? config[key] : defaultValue;
     });
 
-    const mockConfigService = {
+    mockConfigService = {
       get: mockConfigGet,
     };
 
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        OFACService,
-        {
-          provide: ConfigService,
-          useValue: mockConfigService,
-        },
-      ],
-    }).compile();
+    return new OFACService(mockConfigService as any);
+  };
 
-    service = module.get<OFACService>(OFACService);
-    configService = module.get<ConfigService>(ConfigService);
+  beforeEach(() => {
+    jest.useFakeTimers();
   });
 
   afterEach(() => {
+    jest.useRealTimers();
     jest.clearAllMocks();
   });
 
   describe('without provider configured', () => {
+    beforeEach(async () => {
+      service = await createService(undefined, undefined);
+    });
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
     it('should pass all addresses when no provider is configured', async () => {
       const addresses = ['0x' + '1'.repeat(64), '0x' + '2'.repeat(64)];
 
@@ -68,20 +70,14 @@ describe('OFACService', () => {
 
   describe('with provider configured', () => {
     beforeEach(async () => {
-      // Update the mock to return configured provider values
-      mockConfigGet.mockImplementation((key: string, defaultValue?: any) => {
-        const config = {
-          OFAC_API_URL: 'https://api.chainalysis.com/v1',
-          OFAC_API_KEY: 'test-api-key',
-          OFAC_PROVIDER: 'chainalysis',
-          OFAC_MAX_RETRIES: 3,
-          OFAC_TIMEOUT_MS: 30000,
-        };
-        return config[key] !== undefined ? config[key] : defaultValue;
-      });
+      service = await createService(
+        'https://api.chainalysis.com/v1',
+        'test-api-key',
+      );
+    });
 
-      // Recreate service with new configuration
-      service = new OFACService(configService);
+    afterEach(() => {
+      jest.restoreAllMocks();
     });
 
     it('should successfully check addresses on first attempt', async () => {
@@ -123,7 +119,12 @@ describe('OFACService', () => {
           json: jest.fn().mockResolvedValueOnce({ scores: mockResponse }),
         });
 
-      const results = await service.checkAddresses(addresses);
+      const promise = service.checkAddresses(addresses);
+      
+      // Fast-forward through all retry delays
+      jest.runAllTimers();
+      
+      const results = await promise;
 
       expect(results).toHaveLength(1);
       expect(global.fetch).toHaveBeenCalledTimes(2);
@@ -136,7 +137,12 @@ describe('OFACService', () => {
         .fn()
         .mockRejectedValue(new Error('Persistent failure'));
 
-      await expect(service.checkAddresses(addresses)).rejects.toThrow(
+      const promise = service.checkAddresses(addresses);
+      
+      // Fast-forward through all retry delays
+      jest.runAllTimers();
+      
+      await expect(promise).rejects.toThrow(
         'OFAC/AML check unavailable after 3 retries',
       );
 
@@ -270,21 +276,15 @@ describe('OFACService', () => {
   describe('error handling', () => {
     let errorService: OFACService;
 
-    beforeEach(() => {
-      // Update the mock to return configured provider values
-      mockConfigGet.mockImplementation((key: string, defaultValue?: any) => {
-        const config = {
-          OFAC_API_URL: 'https://api.chainalysis.com/v1',
-          OFAC_API_KEY: 'test-api-key',
-          OFAC_PROVIDER: 'chainalysis',
-          OFAC_MAX_RETRIES: 3,
-          OFAC_TIMEOUT_MS: 30000,
-        };
-        return config[key] !== undefined ? config[key] : defaultValue;
-      });
+    beforeEach(async () => {
+      errorService = await createService(
+        'https://api.chainalysis.com/v1',
+        'test-api-key',
+      );
+    });
 
-      // Create a new service with configured provider
-      errorService = new OFACService(configService);
+    afterEach(() => {
+      jest.restoreAllMocks();
     });
 
     it('should handle HTTP 401 Unauthorized', async () => {
@@ -298,9 +298,12 @@ describe('OFACService', () => {
         statusText: 'Unauthorized',
       });
 
-      await expect(errorService.checkAddresses(addresses)).rejects.toThrow(
-        'Provider API returned 401',
-      );
+      const promise = errorService.checkAddresses(addresses);
+      
+      // Fast-forward through all retry delays
+      jest.runAllTimers();
+      
+      await expect(promise).rejects.toThrow('Provider API returned 401');
     });
 
     it('should handle malformed JSON in response', async () => {
@@ -312,7 +315,12 @@ describe('OFACService', () => {
         json: jest.fn().mockRejectedValue(new Error('Invalid JSON')),
       });
 
-      await expect(errorService.checkAddresses(addresses)).rejects.toThrow();
+      const promise = errorService.checkAddresses(addresses);
+      
+      // Fast-forward through all retry delays
+      jest.runAllTimers();
+      
+      await expect(promise).rejects.toThrow();
     });
 
     it('should handle provider error responses', async () => {
@@ -324,7 +332,12 @@ describe('OFACService', () => {
         json: jest.fn().mockResolvedValue({ error: 'Invalid request' }),
       });
 
-      await expect(errorService.checkAddresses(addresses)).rejects.toThrow('error');
+      const promise = errorService.checkAddresses(addresses);
+      
+      // Fast-forward through all retry delays
+      jest.runAllTimers();
+      
+      await expect(promise).rejects.toThrow('error');
     });
 
     it('should handle network failures with retry', async () => {
@@ -339,7 +352,12 @@ describe('OFACService', () => {
         }),
       });
 
-      const result = await errorService.checkAddresses(addresses);
+      const promise = errorService.checkAddresses(addresses);
+      
+      // Fast-forward through all retry delays
+      jest.runAllTimers();
+      
+      const result = await promise;
 
       expect(result).toHaveLength(1);
       expect(fetchSpy).toHaveBeenCalledTimes(2);
@@ -367,9 +385,11 @@ describe('OFACService', () => {
       ];
 
       for (const testCase of testCases) {
-        // Reset fetch mock for this iteration
-        const fetchSpy = jest.spyOn(global as any, 'fetch');
-        fetchSpy.mockClear();
+        // Create a service with configured provider for this test
+        const testService = await createService(
+          'https://api.chainalysis.com/v1',
+          'test-api-key',
+        );
 
         const mockResponse: OFACCheckResult[] = [
           {
@@ -379,24 +399,12 @@ describe('OFACService', () => {
           },
         ];
 
+        const fetchSpy = jest.spyOn(global as any, 'fetch');
         fetchSpy.mockResolvedValue({
           ok: true,
           json: jest.fn().mockResolvedValue({ scores: mockResponse }),
         });
 
-        // Create a new service instance for this test case with configured provider
-        mockConfigGet.mockImplementation((key: string, defaultValue?: any) => {
-          const config = {
-            OFAC_API_URL: 'https://api.chainalysis.com/v1',
-            OFAC_API_KEY: 'test-api-key',
-            OFAC_PROVIDER: 'chainalysis',
-            OFAC_MAX_RETRIES: 3,
-            OFAC_TIMEOUT_MS: 30000,
-          };
-          return config[key] !== undefined ? config[key] : defaultValue;
-        });
-
-        const testService = new OFACService(configService);
         const isHighRisk = await testService.isHighRisk('0x' + '1'.repeat(64));
 
         expect(isHighRisk).toBe(testCase.shouldFail);
