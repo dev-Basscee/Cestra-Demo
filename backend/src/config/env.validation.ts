@@ -31,6 +31,21 @@ export const envValidationSchema = Joi.object({
 
   // CORS
   CORS_ORIGINS: Joi.string().required(),
+
+  // Sui Blockchain Integration
+  SUI_NETWORK: Joi.string()
+    .valid('devnet', 'testnet', 'mainnet')
+    .default('testnet'),
+  SUI_RPC_URL: Joi.string().uri().required(),
+  SUI_PRIVATE_KEY: Joi.string().required(),
+  SUI_PACKAGE_ID: Joi.string().required(),
+
+  // Compliance (optional, for OFAC/AML checking)
+  OFAC_API_KEY: Joi.string().optional(),
+  OFAC_API_URL: Joi.string().uri().optional(),
+
+  // Webhook Configuration
+  WEBHOOK_SECRET: Joi.string().required(),
 }).options({
   // Collect all errors rather than stopping at the first missing key
   abortEarly: false,

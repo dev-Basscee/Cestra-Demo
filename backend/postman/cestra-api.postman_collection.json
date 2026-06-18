@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "cestra-api-collection",
     "name": "Cestra API",
-    "description": "Complete API collection for the Cestra stablecoin payment platform backend.",
+    "description": "Complete API collection for the Cestra stablecoin payment platform backend. Includes Send, Pool, Yield, Circle, and Bridge services with full blockchain integration.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -201,6 +201,34 @@
             "header": [{ "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
             "url": "{{base_url}}/send/{{test_tx_id}}/status"
           }
+        },
+        {
+          "name": "GET Send Transaction Details",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": ["pm.test('Status is 200', () => pm.response.to.have.status(200));", "pm.test('transaction details present', () => { const b = pm.response.json(); pm.expect(b).to.have.property('id'); pm.expect(b).to.have.property('sender'); pm.expect(b).to.have.property('recipient'); pm.expect(b).to.have.property('amount'); pm.expect(b).to.have.property('fee'); pm.expect(b).to.have.property('status'); });"] }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
+            "url": "{{base_url}}/api/transactions/{{test_tx_id}}"
+          }
+        },
+        {
+          "name": "GET Send Transaction History (paginated)",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": ["pm.test('Status is 200', () => pm.response.to.have.status(200));", "pm.test('transaction history with pagination', () => { const b = pm.response.json(); pm.expect(b).to.have.property('items'); pm.expect(b).to.have.property('total'); pm.expect(b).to.have.property('limit'); pm.expect(b).to.have.property('offset'); });"] }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
+            "url": { "raw": "{{base_url}}/api/transactions/history?limit=20&offset=0", "query": [{ "key": "limit", "value": "20" }, { "key": "offset", "value": "0" }] }
+          }
         }
       ]
     },
@@ -333,6 +361,20 @@
             "url": "{{base_url}}/yield/withdraw",
             "body": { "mode": "raw", "raw": "{\n  \"amount\": 1.00\n}" }
           }
+        },
+        {
+          "name": "GET Active Yield Deposits",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": ["pm.test('Status is 200', () => pm.response.to.have.status(200));", "pm.test('deposits list present', () => { const b = pm.response.json(); pm.expect(b).to.be.an('array'); if(b.length > 0) { pm.expect(b[0]).to.have.property('depositId'); pm.expect(b[0]).to.have.property('vaultId'); pm.expect(b[0]).to.have.property('depositAmount'); pm.expect(b[0]).to.have.property('accruedValue'); } });"] }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
+            "url": "{{base_url}}/api/yield/deposits"
+          }
         }
       ]
     },
@@ -383,11 +425,119 @@
             "url": "{{base_url}}/pool/{{test_pool_id}}/contribute",
             "body": { "mode": "raw", "raw": "{\n  \"amount\": 50\n}" }
           }
+        },
+        {
+          "name": "GET Pool Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": ["pm.test('Status is 200', () => pm.response.to.have.status(200));", "pm.test('pool status details present', () => { const b = pm.response.json(); pm.expect(b).to.have.property('poolId'); pm.expect(b).to.have.property('status'); pm.expect(b).to.have.property('totalAmount'); pm.expect(b).to.have.property('contributors'); pm.expect(b).to.have.property('recipients'); });"] }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
+            "url": "{{base_url}}/api/pool/{{test_pool_id}}/status"
+          }
         }
       ]
     },
     {
-      "name": "Business — Batch Payout",
+      "name": "Circle — Savings Circles",
+      "item": [
+        {
+          "name": "POST Create Circle",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": ["pm.test('Status is 201', () => pm.response.to.have.status(201));", "pm.test('circle_id and status present', () => { const b = pm.response.json(); pm.expect(b).to.have.property('circleId'); pm.expect(b.status).to.equal('ACTIVE'); pm.environment.set('test_circle_id', b.circleId); });"] }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
+            "url": "{{base_url}}/api/circle/create",
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Community Savings Circle\",\n  \"members\": [\"member1_address\", \"member2_address\", \"member3_address\"],\n  \"payout_schedule\": \"weekly\",\n  \"round_duration\": 7\n}" }
+          }
+        },
+        {
+          "name": "POST Contribute to Circle",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": ["pm.test('Status is 201', () => pm.response.to.have.status(201));", "pm.test('contribution confirmed', () => { const b = pm.response.json(); pm.expect(b).to.have.property('circleId'); pm.expect(b.status).to.equal('ACTIVE'); });"] }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
+            "url": "{{base_url}}/api/circle/{{test_circle_id}}/contribute",
+            "body": { "mode": "raw", "raw": "{\n  \"amount\": 100\n}" }
+          }
+        },
+        {
+          "name": "GET Circle Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": ["pm.test('Status is 200', () => pm.response.to.have.status(200));", "pm.test('circle status details present', () => { const b = pm.response.json(); pm.expect(b).to.have.property('circleId'); pm.expect(b).to.have.property('status'); pm.expect(b).to.have.property('members'); pm.expect(b).to.have.property('currentRound'); pm.expect(b).to.have.property('contributions'); });"] }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
+            "url": "{{base_url}}/api/circle/{{test_circle_id}}/status"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Bridge — Cross-Chain Relaying",
+      "item": [
+        {
+          "name": "GET Bridge Transfer Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": ["pm.test('Status is 200 or 404', () => pm.response.code === 200 || pm.response.code === 404);", "pm.test('transfer details present if found', () => { if(pm.response.code === 200) { const b = pm.response.json(); pm.expect(b).to.have.property('transferId'); pm.expect(b).to.have.property('status'); pm.expect(b).to.have.property('sourceChain'); pm.expect(b).to.have.property('receiver'); pm.expect(b).to.have.property('amount'); } });"] }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
+            "url": "{{base_url}}/api/bridge/transfers/{{test_transfer_id}}"
+          }
+        },
+        {
+          "name": "GET Bridge Transfers History",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": ["pm.test('Status is 200', () => pm.response.to.have.status(200));", "pm.test('transfers list with pagination', () => { const b = pm.response.json(); pm.expect(b).to.have.property('items'); pm.expect(b).to.have.property('total'); pm.expect(b).to.have.property('limit'); pm.expect(b).to.have.property('offset'); });"] }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
+            "url": { "raw": "{{base_url}}/api/bridge/transfers?limit=20&offset=0&source_chain=ethereum", "query": [{ "key": "limit", "value": "20" }, { "key": "offset", "value": "0" }, { "key": "source_chain", "value": "ethereum" }] }
+          }
+        },
+        {
+          "name": "GET Bridge Transfer by Message ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": ["pm.test('Status is 200 or 404', () => pm.response.code === 200 || pm.response.code === 404);", "pm.test('transfer details present if found', () => { if(pm.response.code === 200) { const b = pm.response.json(); pm.expect(b).to.have.property('messageId'); pm.expect(b).to.have.property('status'); } });"] }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{jwt_token}}" }],
+            "url": "{{base_url}}/api/bridge/transfers/message/{{test_message_id}}"
+          }
+        }
+      ]
+    },
       "item": [
         {
           "name": "POST Batch Payout — valid CSV",
