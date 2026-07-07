@@ -22,11 +22,24 @@ export class ApiKeyStrategy extends PassportStrategy(Strategy, 'api-key') {
       throw new UnauthorizedException('X-API-Key header is required');
     }
 
-    const businesses = await this.businessRepo.find();
-    for (const business of businesses) {
-      const match = await bcrypt.compare(apiKey, business.api_key_hash);
-      if (match) {
-        return business;
+    const parts = apiKey.split('_');
+    if (parts.length === 3 && parts[0] === 'cestra') {
+      const id = parts[1];
+      const business = await this.businessRepo.findOne({ where: { id } });
+      if (business) {
+        const match = await bcrypt.compare(apiKey, business.api_key_hash);
+        if (match) {
+          return business;
+        }
+      }
+    } else {
+      // Fallback for old keys
+      const businesses = await this.businessRepo.find();
+      for (const business of businesses) {
+        const match = await bcrypt.compare(apiKey, business.api_key_hash);
+        if (match) {
+          return business;
+        }
       }
     }
 
