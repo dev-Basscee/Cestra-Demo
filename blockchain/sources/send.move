@@ -416,6 +416,7 @@ module cestra::send {
         _cap: &AdminCap,
         escrow: &mut SendEscrow<T>,
         registry: &mut TxRegistry,
+        compliance: &mut ComplianceRegistry,
         derived_key: vector<u8>,
         reason_code: u8,
         clock: &Clock,
@@ -435,6 +436,8 @@ module cestra::send {
 
         let sender = record.sender;
         let refund_amount = record.amount + record.fee; // now matches actual on-chain return
+
+        compliance::reverse_volume(compliance, sender, record.amount);
 
         transfer::public_transfer(coin::from_balance(refund_bal, ctx), sender);
         transfer::public_transfer(coin::from_balance(fee_bal, ctx),    sender);
@@ -555,4 +558,9 @@ module cestra::send {
     public fun fee_treasury(config: &SendConfig): address { config.fee_treasury }
     public fun liquidity_wallet(config: &SendConfig): address { config.liquidity_wallet }
     public fun max_fee_rate(): u64 { MAX_FEE_RATE }
+
+    #[test_only]
+    public fun init_for_testing(ctx: &mut TxContext) {
+        init(ctx)
+    }
 }
