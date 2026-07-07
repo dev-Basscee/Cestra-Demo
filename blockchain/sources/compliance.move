@@ -254,4 +254,9 @@ module cestra::compliance {
     public fun tier_1(): u8 { KYC_TIER_1 }
     public fun tier_2(): u8 { KYC_TIER_2 }
     public fun tier_3(): u8 { KYC_TIER_3 }
+
+    #[test_only]
+    public fun init_for_testing(ctx: &mut TxContext) {
+        init(ctx)
+    }
 }
