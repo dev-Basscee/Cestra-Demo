@@ -6,11 +6,12 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { Throttle } from '@nestjs/throttler';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { KycService, PersonaWebhookPayload } from './kyc.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { PersonaSignatureGuard } from './guards/persona-signature.guard';
 import { LoginDto } from './dto/login.dto';
 import { KycDto } from './dto/kyc.dto';
 
@@ -27,6 +28,8 @@ export class AuthController {
    * No auth required (public endpoint).
    */
   @Post('login')
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ login: { limit: 5, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   async login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
@@ -65,6 +68,7 @@ export class AuthController {
    * Called by Persona when a KYC session is completed.
    */
   @Post('kyc/webhook')
+  @UseGuards(PersonaSignatureGuard)
   @HttpCode(HttpStatus.OK)
   async kycWebhook(@Body() payload: PersonaWebhookPayload) {
     await this.kycService.handleWebhook(payload);
