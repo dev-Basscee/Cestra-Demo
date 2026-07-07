@@ -166,8 +166,11 @@ module cestra::pool {
         assert!(amount > 0, E_ZERO_AMOUNT);
         assert!(coin::value(&coin_in) >= amount, E_ZERO_AMOUNT);
 
+        let remaining = pool.target - balance::value(&pool.balance);
+        let accepted = if (amount > remaining) { remaining } else { amount };
+
         let mut payment = coin_in;
-        let contribution_coin = coin::split(&mut payment, amount, ctx);
+        let contribution_coin = coin::split(&mut payment, accepted, ctx);
 
         // Return change
         let remainder = coin::value(&payment);
@@ -183,18 +186,18 @@ module cestra::pool {
         // Track individual contribution for refund accounting
         if (table::contains(&pool.contributions, contributor)) {
             let existing = table::borrow_mut(&mut pool.contributions, contributor);
-            *existing = *existing + amount;
+            *existing = *existing + accepted;
         } else {
-            table::add(&mut pool.contributions, contributor, amount);
+            table::add(&mut pool.contributions, contributor, accepted);
             pool.contributor_count = pool.contributor_count + 1;
         };
 
-        compliance::record_volume(compliance, contributor, amount, clock);
+        compliance::record_volume(compliance, contributor, accepted, clock);
 
         event::emit(ContributionAdded {
             pool_id: object::uid_to_inner(&pool.id),
             contributor,
-            amount,
+            amount: accepted,
             pool_balance: balance::value(&pool.balance),
             timestamp_ms: now_ms,
         });
