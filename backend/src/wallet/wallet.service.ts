@@ -70,6 +70,10 @@ export class WalletService {
    * Returns a pending transaction record.
    */
   async fundAch(userId: string, dto: FundAchDto) {
+    if (this.config.get<string>('NODE_ENV') === 'production') {
+      throw new ForbiddenException('ACH funding is not yet available');
+    }
+
     if (dto.amount < 1.0) {
       throw new BadRequestException('amount must be at least $1.00');
     }
@@ -92,6 +96,10 @@ export class WalletService {
    * Stores the address in bridge_addresses with a 24-hour expiry.
    */
   async fundCrosschain(userId: string, dto: FundCrosschainDto) {
+    if (this.config.get<string>('NODE_ENV') === 'production') {
+      throw new ForbiddenException('Cross-chain funding is not yet available');
+    }
+
     // Generate a deterministic-looking deposit address (stub)
     // In production: call CCTP V2 or Wormhole SDK to generate a real deposit address
     const address = await this.generateBridgeAddress(dto.source_chain);
