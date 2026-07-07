@@ -48,6 +48,7 @@ import { BlockchainModule } from './blockchain/blockchain.module';
         throttlers: [
           { name: 'consumer', ttl: 60000, limit: 60 },
           { name: 'business', ttl: 60000, limit: 600 },
+          { name: 'login', ttl: 60000, limit: 5 },
         ],
         storage: new ThrottlerStorageRedisService(redis),
       }),
