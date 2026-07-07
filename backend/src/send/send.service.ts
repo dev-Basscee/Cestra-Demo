@@ -15,6 +15,8 @@ import { CreateSendDto } from './dto/create-send.dto';
 import { WalletService } from '../wallet/wallet.service';
 import { REDIS_CLIENT } from '../redis/redis.constants';
 import Redis from 'ioredis';
+import { User } from '../auth/entities/user.entity';
+import { SendService as SuiSendService } from '../sui/send.service';
 
 // KYC tier monthly send limits in USD
 const KYC_TIER_LIMITS: Record<number, number> = {
@@ -35,7 +37,10 @@ export class SendService {
     private readonly walletRepo: Repository<Wallet>,
     @InjectRepository(Recipient)
     private readonly recipientRepo: Repository<Recipient>,
+    @InjectRepository(User)
+    private readonly userRepo: Repository<User>,
     private readonly walletService: WalletService,
+    private readonly suiSendService: SuiSendService,
     @Inject(REDIS_CLIENT)
     private readonly redis: Redis,
   ) {}
@@ -98,13 +103,13 @@ export class SendService {
 
     // Create transaction record
     const tx = this.txRepo.create({
-      user_id: userId,
-      recipient_id: dto.recipient_id,
+      user: { id: userId },
+      recipient: { id: dto.recipient_id },
       type: 'sent',
       amount: dto.amount.toFixed(6),
       fee: fee.toFixed(6),
       corridor: dto.corridor,
-      status: 'COMPLETED',
+      status: 'PENDING',
       idempotency_key: idempotencyKey ?? null,
     });
     await this.txRepo.save(tx);
@@ -112,9 +117,37 @@ export class SendService {
     // Invalidate balance cache
     await this.walletService.invalidateBalanceCache(userId);
 
-    // NOTE: On-chain settlement via cestra::send is wired separately
-    // (requires funded relayer + SendEscrow). In demo mode the transfer is
-    // recorded and the balance debited; on-chain submission is the next step.
+    // Call Sui send flow
+    try {
+      const user = await this.userRepo.findOne({ where: { id: userId } });
+      if (!user || !user.wallet_address) {
+        throw new UnprocessableEntityException('User wallet address not found');
+      }
+
+      const suiResponse = await this.suiSendService.initiateSend({
+        sender: user.wallet_address,
+        recipient: dto.recipient_id,
+        amount: BigInt(Math.floor(dto.amount * 1_000_000)),
+      });
+
+      if (suiResponse.digest) {
+        tx.on_chain_tx_hash = suiResponse.digest;
+        await this.txRepo.save(tx);
+      }
+    } catch (e) {
+      // Revert balance on failure
+      await this.walletRepo.increment(
+        { id: wallet.id },
+        'balance_usdsui',
+        totalDebit,
+      );
+      
+      tx.status = 'FAILED';
+      await this.txRepo.save(tx);
+      await this.walletService.invalidateBalanceCache(userId);
+      
+      throw e;
+    }
 
     return tx;
   }
