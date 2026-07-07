@@ -3,7 +3,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { ParsedEvent } from './on-chain-monitor.service';
 import { EventRoutingService } from './event-routing.service';
-import { Transaction, TransactionStatus } from '../blockchain/entities/transaction.entity';
+import { Transaction as OnChainTransaction, TransactionStatus as OnChainTransactionStatus } from '../blockchain/entities/transaction.entity';
+import { Transaction as SendTransaction } from '../send/entities/transaction.entity';
 import { BatchPayout, BatchPayoutStatus } from '../blockchain/entities/batch-payout.entity';
 import { YieldDeposit, YieldDepositStatus } from '../blockchain/entities/yield-deposit.entity';
 import { SavingsCircle, SavingsCircleStatus } from '../blockchain/entities/savings-circle.entity';
@@ -36,8 +37,10 @@ export class StateSyncService {
 
   constructor(
     private dataSource: DataSource,
-    @InjectRepository(Transaction)
-    private transactionRepository: Repository<Transaction>,
+    @InjectRepository(OnChainTransaction)
+    private transactionRepository: Repository<OnChainTransaction>,
+    @InjectRepository(SendTransaction)
+    private sendTransactionRepository: Repository<SendTransaction>,
     private eventRoutingService: EventRoutingService,
   ) {
     this.registerHandlers();
@@ -121,34 +124,47 @@ export class StateSyncService {
 
       await this.dataSource.transaction(async (manager) => {
         // Try to find existing transaction by digest
-        let transaction = await manager.findOne(Transaction, {
+        let transaction = await manager.findOne(OnChainTransaction, {
           where: { onChainDigest: event.digest },
         });
 
         if (transaction) {
           // Update existing
-          transaction.status = TransactionStatus.CONFIRMED;
+          transaction.status = OnChainTransactionStatus.CONFIRMED;
           await manager.save(transaction);
 
           this.logger.debug(
-            `Updated Transaction: ${transaction.id} (digest: ${event.digest})`,
+            `Updated OnChainTransaction: ${transaction.id} (digest: ${event.digest})`,
           );
         } else {
           // Create new
-          transaction = manager.create(Transaction, {
+          transaction = manager.create(OnChainTransaction, {
             sender,
             recipient,
             amount: BigInt(amount),
             fee: BigInt(fee),
             kycTier: 1, // Will be updated by compliance engine
-            status: TransactionStatus.CONFIRMED,
+            status: OnChainTransactionStatus.CONFIRMED,
             onChainDigest: event.digest,
           });
 
           await manager.save(transaction);
 
           this.logger.debug(
-            `Created Transaction: ${transaction.id} (digest: ${event.digest})`,
+            `Created OnChainTransaction: ${transaction.id} (digest: ${event.digest})`,
+          );
+        }
+
+        // Also update internal send transaction to COMPLETED
+        const sendTx = await manager.findOne(SendTransaction, {
+          where: { on_chain_tx_hash: event.digest },
+        });
+
+        if (sendTx) {
+          sendTx.status = 'COMPLETED';
+          await manager.save(sendTx);
+          this.logger.debug(
+            `Updated SendTransaction: ${sendTx.id} to COMPLETED (digest: ${event.digest})`,
           );
         }
       });
