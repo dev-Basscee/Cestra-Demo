@@ -22,6 +22,7 @@ import { CircleService } from './circle.service';
 import { BridgeService } from './bridge.service';
 import { PendingTransaction } from '../blockchain/entities/pending-transaction.entity';
 import { Transaction } from '../blockchain/entities/transaction.entity';
+import { Transaction as SendTransaction } from '../send/entities/transaction.entity';
 import { BatchPayout } from '../blockchain/entities/batch-payout.entity';
 import { YieldDeposit } from '../blockchain/entities/yield-deposit.entity';
 import { SavingsCircle } from '../blockchain/entities/savings-circle.entity';
@@ -38,6 +39,7 @@ export { SUI_CLIENT, SUI_KEYPAIR } from './sui.constants';
     TypeOrmModule.forFeature([
       PendingTransaction,
       Transaction,
+      SendTransaction,
       BatchPayout,
       YieldDeposit,
       SavingsCircle,
