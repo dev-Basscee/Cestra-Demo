@@ -1,4 +1,4 @@
-import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Logger, UnauthorizedException, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
@@ -39,7 +39,7 @@ const GOOGLE_JWKS_URL = 'https://www.googleapis.com/oauth2/v3/certs';
 const GOOGLE_ISSUERS = ['https://accounts.google.com', 'accounts.google.com'];
 
 @Injectable()
-export class AuthService {
+export class AuthService implements OnModuleInit {
   private readonly logger = new Logger(AuthService.name);
 
   // Cache Google's signing keys; refreshed when an unknown kid is seen.
@@ -52,6 +52,15 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
   ) {}
+
+  onModuleInit() {
+    const isProd = this.configService.get<string>('NODE_ENV') === 'production';
+    if (isProd) {
+      if (!this.configService.get<string>('GOOGLE_CLIENT_ID')) {
+        throw new Error('GOOGLE_CLIENT_ID must be configured in production');
+      }
+    }
+  }
 
   /**
    * Verifies a Google zkLogin id_token, derives the Sui zkLogin address,
@@ -102,10 +111,20 @@ export class AuthService {
     token: string,
     provider: 'google' | 'apple',
   ): Promise<string | null> {
-    const googleClientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
-
-    if (provider === 'google' && googleClientId) {
+    if (provider === 'google') {
+      const googleClientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
+      if (!googleClientId) {
+        throw new Error('GOOGLE_CLIENT_ID must be configured');
+      }
       return this.verifyGoogleZkLogin(token, googleClientId);
+    }
+
+    if (provider === 'apple') {
+      throw new UnauthorizedException('Apple sign-in is not yet supported');
+    }
+
+    if (this.configService.get<string>('NODE_ENV') === 'production') {
+      throw new UnauthorizedException('Unsupported provider');
     }
 
     // Dev fallback — no OAuth configured.
