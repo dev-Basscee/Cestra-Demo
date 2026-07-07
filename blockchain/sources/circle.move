@@ -96,6 +96,9 @@ module cestra::circle {
         circle_id: ID, period: u64, recipient: address,
         amount: u64, paid_at_ms: u64,
     }
+    public struct PeriodPotRefunded has copy, drop {
+        circle_id: ID, period: u64, total_refunded: u64, refunded_at_ms: u64,
+    }
     public struct MemberExcluded has copy, drop {
         circle_id: ID, member: address, period: u64, reason: u8,
     }
@@ -332,6 +335,34 @@ module cestra::circle {
                 amount: payout_amount,
                 paid_at_ms: now_ms,
             });
+        } else {
+            if (payout_amount > 0) {
+                let mut out_balance = balance::withdraw_all(&mut circle.pot);
+                let mut total_refunded = 0;
+                
+                let mut j = 0;
+                while (j < len) {
+                    let member = *vector::borrow(&circle.payout_order, j);
+                    let contributed = table::contains(&circle.period_contributions, member) &&
+                        *table::borrow(&circle.period_contributions, member) == circle.period_nonce;
+                    if (contributed) {
+                        let refund_balance = balance::split(&mut out_balance, circle.contribution_amount);
+                        let refund_coin = coin::from_balance(refund_balance, ctx);
+                        transfer::public_transfer(refund_coin, member);
+                        total_refunded = total_refunded + circle.contribution_amount;
+                    };
+                    j = j + 1;
+                };
+                
+                balance::destroy_zero(out_balance);
+
+                event::emit(PeriodPotRefunded {
+                    circle_id: object::uid_to_inner(&circle.id),
+                    period: circle.current_period,
+                    total_refunded,
+                    refunded_at_ms: now_ms,
+                });
+            };
         };
 
         // Clear period state and increment nonce
